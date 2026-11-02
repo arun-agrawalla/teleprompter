@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Teleprompter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f3f4f1;
+    --surface: #ffffff;
+    --ink: #1c1d1f;
+    --muted: #63666b;
+    --line: #d5d7d2;
+    --accent: #e0a400;
+    --accent-ink: #1c1d1f;
+    --p-bg: #000000;
+    --p-ink: #f6f1e4;
+    --font: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a;
+      --surface: #202225;
+      --ink: #ecebe6;
+      --muted: #9a9ca0;
+      --line: #34363a;
+      --accent: #f2b81f;
+      --accent-ink: #17181a;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font); -webkit-tap-highlight-color: transparent; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  /* ---------- Setup screen ---------- */
+  #editor {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  #editor header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  #editor h1 { font-size: 1.15rem; margin: 0; }
+  #stats { color: var(--muted); font-size: 0.85rem; }
+  #script {
+    flex: 1;
+    min-height: 60px;
+    width: 100%;
+    resize: none;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--ink);
+    font: 1rem/1.5 var(--font);
+  }
+  .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stepper {
+    display: flex; align-items: center; justify-content: space-between;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+    padding: 4px 4px 4px 12px; gap: 4px;
+  }
+  .stepper .label { font-size: 0.9rem; color: var(--muted); flex: 1; }
+  .stepper .val { min-width: 2.2em; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stepper button {
+    width: 40px; height: 40px; border: 0; border-radius: 8px;
+    background: var(--bg); font-size: 1.2rem; font-weight: 700;
+  }
+  .toggle {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+    min-height: 48px; padding: 0 12px; font-size: 0.95rem;
+  }
+  .toggle[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+
+  /* One line at the real size and width, so you see how many words fit before starting */
+  #preview {
+    background: var(--p-bg); color: var(--p-ink);
+    border-radius: 10px;
+    padding: 4px 16px;
+    font-weight: 700; line-height: 1.38;
+    white-space: nowrap; overflow: hidden; text-overflow: clip;
+  }
+  #preview.mirror span { display: inline-block; transform: scaleX(-1); }
+
+  .actions { display: flex; gap: 8px; }
+  .btn { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 0 16px; min-height: 48px; }
+  .btn.primary { flex: 1; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; font-size: 1.05rem; }
+  .hint { margin: 0; font-size: 0.8rem; color: var(--muted); text-align: center; }
+
+  /* Short split-screen windows: tighten everything */
+  @media (max-height: 520px) {
+    #editor { gap: 6px; }
+    #editor header, .hint { display: none; }
+    .stepper button { width: 36px; height: 36px; }
+    .toggle, .btn { min-height: 40px; }
+  }
+
+  /* ---------- Prompter: text only ---------- */
+  #prompter { position: fixed; inset: 0; background: var(--p-bg); color: var(--p-ink); user-select: none; -webkit-user-select: none; }
+  #scroller { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; touch-action: pan-y; }
+  #scroller::-webkit-scrollbar { display: none; }
+  #text {
+    --fs: 40px;
+    font-size: var(--fs);
+    line-height: 1.38;
+    font-weight: 700;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    padding: 30vh calc(16px + env(safe-area-inset-right, 0px)) 100vh calc(16px + env(safe-area-inset-left, 0px));
+    padding-top: 30dvh;
+    padding-bottom: 100dvh;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  #text.mirror { transform: scaleX(-1); }
+  #text.center, #preview.center { text-align: center; }
+  #guide { position: absolute; left: 0; right: 0; top: 30vh; top: 30dvh; height: 0; pointer-events: none; }
+  #guide::before, #guide::after { content: ""; position: absolute; top: -8px; border: 8px solid transparent; }
+  #guide::before { left: 0; border-left-color: var(--accent); }
+  #guide::after { right: 0; border-right-color: var(--accent); }
+  #progress { position: absolute; top: 0; left: 0; height: 3px; width: 0; background: var(--accent); pointer-events: none; }
+
+  #countdown {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font-size: min(40vh, 40vw); font-weight: 700; color: var(--accent);
+    background: rgba(0,0,0,0.6); pointer-events: none;
+  }
+  #toast {
+    position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    background: rgba(40,40,40,0.92); color: var(--p-ink);
+    padding: 8px 14px; border-radius: 999px; font-size: 0.85rem; white-space: nowrap;
+    pointer-events: none; transition: opacity 0.25s ease; opacity: 0;
+  }
+  #toast.show { opacity: 1; }
+
+  /* Small stop button, top-left, always available while prompting */
+  #stop {
+    position: absolute;
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    width: 36px; height: 36px;
+    display: grid; place-items: center;
+    border: 1px solid rgba(246, 241, 228, 0.25);
+    border-radius: 50%;
+    background: rgba(40, 40, 40, 0.55);
+    padding: 0;
+    opacity: 0.6;
+    z-index: 2;
+  }
+  #stop:hover, #stop:focus-visible { opacity: 1; }
+  #stop::before { content: ""; width: 12px; height: 12px; border-radius: 2px; background: #e5484d; }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+</head>
+<body>
+
+<section id="editor">
+  <header>
+    <h1>Teleprompter</h1>
+    <span id="stats">0 words</span>
+  </header>
+  <textarea id="script" placeholder="Paste or type your script here. It stays saved on this device." aria-label="Script"></textarea>
+
+  <div class="settings">
+    <div class="stepper" aria-label="Speed">
+      <span class="label">Speed</span>
+      <button type="button" id="slower" aria-label="Slower">−</button>
+      <span class="val" id="speedVal">7</span>
+      <button type="button" id="faster" aria-label="Faster">+</button>
+    </div>
+    <div class="stepper" aria-label="Text size">
+      <span class="label">Size</span>
+      <button type="button" id="smaller" aria-label="Smaller text">−</button>
+      <span class="val" id="sizeVal">40</span>
+      <button type="button" id="bigger" aria-label="Bigger text">+</button>
+    </div>
+    <button type="button" class="toggle" id="mirror" aria-pressed="false">Mirror text</button>
+    <button type="button" class="toggle" id="align" aria-pressed="false">Center text</button>
+  </div>
+
+  <div id="preview" aria-hidden="true"><span id="previewText">Your script at this size</span></div>
+
+  <div class="actions">
+    <button class="btn" id="restart" type="button" hidden>From top</button>
+    <button class="btn primary" id="start" type="button">Start</button>
+  </div>
+  <p class="hint">While prompting: tap to pause or resume, double-tap to come back here.</p>
+</section>
+
+<section id="prompter" hidden aria-label="Prompter">
+  <div id="scroller"><div id="text"></div></div>
+  <div id="guide"></div>
+  <div id="progress"></div>
+  <div id="countdown" hidden></div>
+  <div id="toast" role="status"></div>
+  <button type="button" id="stop" aria-label="Stop and go to settings" title="Stop"></button>
+</section>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const editor = $("editor"), prompter = $("prompter"), scroller = $("scroller"), text = $("text");
+  const script = $("script"), stats = $("stats"), progress = $("progress"), toast = $("toast"), countdown = $("countdown");
+  const preview = $("preview"), previewText = $("previewText");
+
+  const KEY = "teleprompter:v2";
+  const state = { script: "", speed: 7, size: 40, mirror: false, center: false, pos: 0 };
+  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && typeof s === "object") Object.assign(state, s); } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+  // ---------- Setup screen ----------
+  script.value = state.script;
+  const updateStats = () => {
+    const words = (script.value.trim().match(/\S+/g) || []).length;
+    const mins = words / 140;
+    stats.textContent = words ? `${words} words, about ${mins < 1 ? Math.max(1, Math.round(mins * 60)) + " sec" : mins.toFixed(1) + " min"}` : "0 words";
+    previewText.textContent = script.value.trim().replace(/\s+/g, " ").slice(0, 200) || "Your script at this size";
+  };
+  const updateRestart = () => { $("restart").hidden = !(state.pos > 0 && state.script.trim()); $("start").textContent = state.pos > 0 && state.script.trim() ? "Resume" : "Start"; };
+
+  let saveTimer;
+  script.addEventListener("input", () => {
+    if (script.value !== state.script) state.pos = 0; // edited script starts from the top
+    state.script = script.value;
+    updateStats(); updateRestart();
+    clearTimeout(saveTimer); saveTimer = setTimeout(save, 300);
+  });
+
+  const applySettings = () => {
+    text.style.setProperty("--fs", state.size + "px");
+    preview.style.fontSize = state.size + "px";
+    text.classList.toggle("mirror", state.mirror);
+    preview.classList.toggle("mirror", state.mirror);
+    text.classList.toggle("center", state.center);
+    preview.classList.toggle("center", state.center);
+    $("mirror").setAttribute("aria-pressed", String(state.mirror));
+    $("align").setAttribute("aria-pressed", String(state.center));
+    $("speedVal").textContent = state.speed;
+    $("sizeVal").textContent = state.size;
+  };
+  const setSpeed = (d) => { state.speed = Math.min(30, Math.max(1, state.speed + d)); applySettings(); save(); };
+  const setSize = (d) => { state.size = Math.min(120, Math.max(18, state.size + d)); applySettings(); save(); };
+
+  $("slower").addEventListener("click", () => setSpeed(-1));
+  $("faster").addEventListener("click", () => setSpeed(1));
+  $("smaller").addEventListener("click", () => setSize(-4));
+  $("bigger").addEventListener("click", () => setSize(4));
+  $("mirror").addEventListener("click", () => { state.mirror = !state.mirror; applySettings(); save(); });
+  $("align").addEventListener("click", () => { state.center = !state.center; applySettings(); save(); });
+
+  // ---------- Scrolling engine ----------
+  let playing = false, pos = 0, last = 0, raf = 0, wakeLock = null, countTimer = 0, toastTimer = 0;
+  const endOfText = () => Math.max(0, Math.min(scroller.scrollHeight - scroller.clientHeight, text.scrollHeight - scroller.clientHeight * 1.3));
+  const updateProgress = () => { progress.style.width = Math.min(100, (scroller.scrollTop / Math.max(1, endOfText())) * 100) + "%"; };
+  const showToast = (msg, ms = 2200) => {
+    toast.textContent = msg; toast.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove("show"), ms);
+  };
+
+  const tick = (t) => {
+    if (!playing) return;
+    const dt = last ? Math.min(0.1, (t - last) / 1000) : 0;
+    last = t;
+    pos += state.speed * state.size * 0.075 * dt; // steady lines-per-second at any size
+    if (pos >= endOfText()) { pos = endOfText(); scroller.scrollTop = pos; pause(); showToast("End of script. Double-tap for settings", 3500); return; }
+    scroller.scrollTop = pos;
+    updateProgress();
+    raf = requestAnimationFrame(tick);
+  };
+  const play = () => {
+    if (playing) return;
+    if (scroller.scrollTop >= endOfText() - 1) scroller.scrollTop = 0; // replay from top when at the end
+    playing = true; last = 0; pos = scroller.scrollTop;
+    toast.classList.remove("show");
+    raf = requestAnimationFrame(tick);
+  };
+  function pause() {
+    playing = false;
+    cancelAnimationFrame(raf);
+    state.pos = scroller.scrollTop; save();
+  }
+  const cancelCountdown = () => { clearInterval(countTimer); countdown.hidden = true; };
+  const startWithCountdown = () => {
+    cancelCountdown();
+    let n = 3;
+    countdown.textContent = n; countdown.hidden = false;
+    countTimer = setInterval(() => {
+      n -= 1;
+      if (n <= 0) { cancelCountdown(); play(); }
+      else countdown.textContent = n;
+    }, 800);
+  };
+
+  scroller.addEventListener("scroll", () => { if (!playing) { pos = scroller.scrollTop; updateProgress(); } }, { passive: true });
+
+  // Tap = pause/resume, double-tap = back to setup
+  let tapTimer = 0;
+  scroller.addEventListener("click", () => {
+    if (tapTimer) { clearTimeout(tapTimer); tapTimer = 0; closePrompter(); return; }
+    tapTimer = setTimeout(() => {
+      tapTimer = 0;
+      if (!countdown.hidden) { cancelCountdown(); showToast("Paused. Tap to resume, double-tap for settings"); return; }
+      if (playing) { pause(); showToast("Paused. Tap to resume, double-tap for settings"); }
+      else play();
+    }, 280);
+  });
+
+  // ---------- Keep screen awake ----------
+  const lockScreen = async () => {
+    try { if ("wakeLock" in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => { wakeLock = null; }); } } catch (e) {}
+  };
+  const unlockScreen = () => { try { wakeLock && wakeLock.release(); } catch (e) {} wakeLock = null; };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !prompter.hidden) lockScreen();
+    else if (playing) pause();
+  });
+
+  // ---------- Switching screens ----------
+  const openPrompter = (fromTop) => {
+    if (!script.value.trim()) { script.focus(); script.placeholder = "Add some text first, then press Start."; return; }
+    state.script = script.value;
+    if (fromTop) state.pos = 0;
+    save();
+    text.textContent = state.script;
+    applySettings();
+    editor.hidden = true; prompter.hidden = false;
+    scroller.scrollTop = pos = state.pos; updateProgress();
+    lockScreen();
+    startWithCountdown();
+  };
+  function closePrompter() {
+    cancelCountdown(); pause(); unlockScreen();
+    toast.classList.remove("show");
+    prompter.hidden = true; editor.hidden = false;
+    updateRestart();
+  }
+  $("start").addEventListener("click", () => openPrompter(false));
+  $("restart").addEventListener("click", () => openPrompter(true));
+  $("stop").addEventListener("click", (e) => { e.stopPropagation(); clearTimeout(tapTimer); tapTimer = 0; closePrompter(); });
+
+  // ---------- Keyboard / Bluetooth remote ----------
+  document.addEventListener("keydown", (e) => {
+    if (prompter.hidden) return;
+    switch (e.key) {
+      case " ": case "Enter": case "PageDown": case "MediaPlayPause":
+        e.preventDefault(); cancelCountdown(); playing ? pause() : play(); break;
+      case "ArrowUp": case "ArrowRight": e.preventDefault(); setSpeed(1); showToast("Speed " + state.speed, 1000); break;
+      case "ArrowDown": case "ArrowLeft": e.preventDefault(); setSpeed(-1); showToast("Speed " + state.speed, 1000); break;
+      case "PageUp": e.preventDefault(); pause(); scroller.scrollTop = pos = Math.max(0, pos - scroller.clientHeight * 0.4); break;
+      case "+": case "=": setSize(4); break;
+      case "-": setSize(-4); break;
+      case "Home": pause(); scroller.scrollTop = pos = 0; updateProgress(); break;
+      case "Escape": closePrompter(); break;
+    }
+  });
+  window.addEventListener("resize", () => { if (!playing) pos = scroller.scrollTop; updateProgress(); });
+
+  updateStats(); updateRestart(); applySettings();
+})();
+</script>
+</body>
+</html>
