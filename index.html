@@ -39,8 +39,8 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body { background: var(--bg); color: var(--ink); font-family: var(--font); -webkit-tap-highlight-color: transparent; }
-  button { font: inherit; color: inherit; cursor: pointer; }
-  button:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button, select { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   [hidden] { display: none !important; }
 
   /* ---------- Setup screen ---------- */
@@ -69,30 +69,32 @@
     font: 1rem/1.5 var(--font);
   }
   .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .span2 { grid-column: 1 / -1; }
+  .segmented { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+  .segmented button { flex: 1; border: 0; background: transparent; min-height: 44px; padding: 0 10px; }
+  .segmented button + button { border-left: 1px solid var(--line); }
+  .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .segmented button:disabled { opacity: 0.45; cursor: not-allowed; }
   .stepper {
     display: flex; align-items: center; justify-content: space-between;
     border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
     padding: 4px 4px 4px 12px; gap: 4px;
   }
+  .stepper.off { opacity: 0.4; pointer-events: none; }
   .stepper .label { font-size: 0.9rem; color: var(--muted); flex: 1; }
   .stepper .val { min-width: 2.2em; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .stepper button {
-    width: 40px; height: 40px; border: 0; border-radius: 8px;
-    background: var(--bg); font-size: 1.2rem; font-weight: 700;
-  }
-  .toggle {
-    border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
-    min-height: 48px; padding: 0 12px; font-size: 0.95rem;
-  }
+  .stepper button { width: 40px; height: 40px; border: 0; border-radius: 8px; background: var(--bg); font-size: 1.2rem; font-weight: 700; }
+  .langrow { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 4px 4px 4px 12px; }
+  .langrow label { font-size: 0.9rem; color: var(--muted); flex: 1; }
+  .langrow select { border: 0; background: var(--bg); border-radius: 8px; min-height: 40px; padding: 0 10px; }
+  .toggle { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); min-height: 46px; padding: 0 12px; font-size: 0.95rem; }
   .toggle[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
 
-  /* One line at the real size and width, so you see how many words fit before starting */
   #preview {
     background: var(--p-bg); color: var(--p-ink);
-    border-radius: 10px;
-    padding: 4px 16px;
+    border-radius: 10px; padding: 4px 16px;
     font-weight: 700; line-height: 1.38;
-    white-space: nowrap; overflow: hidden; text-overflow: clip;
+    white-space: nowrap; overflow: hidden;
   }
   #preview.mirror span { display: inline-block; transform: scaleX(-1); }
 
@@ -101,12 +103,12 @@
   .btn.primary { flex: 1; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; font-size: 1.05rem; }
   .hint { margin: 0; font-size: 0.8rem; color: var(--muted); text-align: center; }
 
-  /* Short split-screen windows: tighten everything */
-  @media (max-height: 520px) {
+  @media (max-height: 560px) {
     #editor { gap: 6px; }
     #editor header, .hint { display: none; }
     .stepper button { width: 36px; height: 36px; }
-    .toggle, .btn { min-height: 40px; }
+    .toggle, .btn, .segmented button { min-height: 40px; }
+    .langrow select { min-height: 36px; }
   }
 
   /* ---------- Prompter: text only ---------- */
@@ -115,6 +117,7 @@
   #scroller::-webkit-scrollbar { display: none; }
   #text {
     --fs: 40px;
+    position: relative;
     font-size: var(--fs);
     line-height: 1.38;
     font-weight: 700;
@@ -128,6 +131,13 @@
   }
   #text.mirror { transform: scaleX(-1); }
   #text.center, #preview.center { text-align: center; }
+
+  /* Voice mode word states */
+  .w { border-radius: 0.12em; transition: opacity 0.25s ease, background-color 0.25s ease; }
+  #text.voice .w.done { opacity: 0.38; }
+  #text.voice .w.now { box-shadow: inset 0 -0.09em 0 var(--accent); }
+  #text.voice .w.cue { background: rgba(242, 184, 31, 0.3); }
+
   #guide { position: absolute; left: 0; right: 0; top: 30vh; top: 30dvh; height: 0; pointer-events: none; }
   #guide::before, #guide::after { content: ""; position: absolute; top: -8px; border: 8px solid transparent; }
   #guide::before { left: 0; border-left-color: var(--accent); }
@@ -142,13 +152,13 @@
   #toast {
     position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
+    max-width: calc(100% - 24px);
     background: rgba(40,40,40,0.92); color: var(--p-ink);
-    padding: 8px 14px; border-radius: 999px; font-size: 0.85rem; white-space: nowrap;
+    padding: 8px 14px; border-radius: 16px; font-size: 0.85rem; text-align: center;
     pointer-events: none; transition: opacity 0.25s ease; opacity: 0;
   }
   #toast.show { opacity: 1; }
 
-  /* Small stop button, top-left, always available while prompting */
   #stop {
     position: absolute;
     top: calc(8px + env(safe-area-inset-top, 0px));
@@ -158,13 +168,23 @@
     border: 1px solid rgba(246, 241, 228, 0.25);
     border-radius: 50%;
     background: rgba(40, 40, 40, 0.55);
-    padding: 0;
-    opacity: 0.6;
-    z-index: 2;
+    padding: 0; opacity: 0.6; z-index: 2;
   }
   #stop:hover, #stop:focus-visible { opacity: 1; }
   #stop::before { content: ""; width: 12px; height: 12px; border-radius: 2px; background: #e5484d; }
-  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+
+  /* Tiny listening light, top-right */
+  #mic {
+    position: absolute;
+    top: calc(20px + env(safe-area-inset-top, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    width: 10px; height: 10px; border-radius: 50%;
+    background: rgba(246, 241, 228, 0.3);
+    pointer-events: none; z-index: 2;
+  }
+  #mic.on { background: #3fb950; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  @media (prefers-reduced-motion: reduce) { #toast, .w { transition: none; } #mic.on { animation: none; } }
 </style>
 </head>
 <body>
@@ -177,7 +197,11 @@
   <textarea id="script" placeholder="Paste or type your script here. It stays saved on this device." aria-label="Script"></textarea>
 
   <div class="settings">
-    <div class="stepper" aria-label="Speed">
+    <div class="segmented span2" role="group" aria-label="Mode">
+      <button type="button" id="modeScroll" aria-pressed="true">Auto scroll</button>
+      <button type="button" id="modeVoice" aria-pressed="false">Follow my voice</button>
+    </div>
+    <div class="stepper" id="speedBox" aria-label="Speed">
       <span class="label">Speed</span>
       <button type="button" id="slower" aria-label="Slower">−</button>
       <span class="val" id="speedVal">7</span>
@@ -189,6 +213,15 @@
       <span class="val" id="sizeVal">40</span>
       <button type="button" id="bigger" aria-label="Bigger text">+</button>
     </div>
+    <div class="langrow span2" id="langRow" hidden>
+      <label for="lang">Language you’ll speak</label>
+      <select id="lang">
+        <option value="en-IN">English (India)</option>
+        <option value="en-US">English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="hi-IN">Hindi</option>
+      </select>
+    </div>
     <button type="button" class="toggle" id="mirror" aria-pressed="false">Mirror text</button>
     <button type="button" class="toggle" id="align" aria-pressed="false">Center text</button>
   </div>
@@ -199,7 +232,7 @@
     <button class="btn" id="restart" type="button" hidden>From top</button>
     <button class="btn primary" id="start" type="button">Start</button>
   </div>
-  <p class="hint">While prompting: tap to pause or resume, double-tap to come back here.</p>
+  <p class="hint" id="hint">While prompting: tap to pause or resume, double-tap or the red button to come back here.</p>
 </section>
 
 <section id="prompter" hidden aria-label="Prompter">
@@ -208,34 +241,42 @@
   <div id="progress"></div>
   <div id="countdown" hidden></div>
   <div id="toast" role="status"></div>
+  <div id="mic" hidden></div>
   <button type="button" id="stop" aria-label="Stop and go to settings" title="Stop"></button>
 </section>
 
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const editor = $("editor"), prompter = $("prompter"), scroller = $("scroller"), text = $("text");
+  const editor = $("editor"), prompter = $("prompter"), scroller = $("scroller"), text = $("text"), guide = $("guide");
   const script = $("script"), stats = $("stats"), progress = $("progress"), toast = $("toast"), countdown = $("countdown");
-  const preview = $("preview"), previewText = $("previewText");
+  const preview = $("preview"), previewText = $("previewText"), mic = $("mic");
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  const KEY = "teleprompter:v2";
-  const state = { script: "", speed: 7, size: 40, mirror: false, center: false, pos: 0 };
-  try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && typeof s === "object") Object.assign(state, s); } catch (e) {}
+  const KEY = "teleprompter:v3";
+  const state = { script: "", speed: 7, size: 40, mirror: false, center: false, pos: 0, mode: "scroll", lang: "en-IN", cursor: 0 };
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem("teleprompter:v2") || "null");
+    if (s && typeof s === "object") Object.assign(state, s);
+  } catch (e) {}
+  if (!SR) state.mode = "scroll";
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
 
   // ---------- Setup screen ----------
   script.value = state.script;
+  $("lang").value = state.lang;
   const updateStats = () => {
     const words = (script.value.trim().match(/\S+/g) || []).length;
     const mins = words / 140;
     stats.textContent = words ? `${words} words, about ${mins < 1 ? Math.max(1, Math.round(mins * 60)) + " sec" : mins.toFixed(1) + " min"}` : "0 words";
     previewText.textContent = script.value.trim().replace(/\s+/g, " ").slice(0, 200) || "Your script at this size";
   };
-  const updateRestart = () => { $("restart").hidden = !(state.pos > 0 && state.script.trim()); $("start").textContent = state.pos > 0 && state.script.trim() ? "Resume" : "Start"; };
+  const hasProgress = () => state.script.trim() && (state.mode === "voice" ? state.cursor > 0 : state.pos > 0);
+  const updateRestart = () => { $("restart").hidden = !hasProgress(); $("start").textContent = hasProgress() ? "Resume" : "Start"; };
 
   let saveTimer;
   script.addEventListener("input", () => {
-    if (script.value !== state.script) state.pos = 0; // edited script starts from the top
+    if (script.value !== state.script) { state.pos = 0; state.cursor = 0; }
     state.script = script.value;
     updateStats(); updateRestart();
     clearTimeout(saveTimer); saveTimer = setTimeout(save, 300);
@@ -244,18 +285,27 @@
   const applySettings = () => {
     text.style.setProperty("--fs", state.size + "px");
     preview.style.fontSize = state.size + "px";
-    text.classList.toggle("mirror", state.mirror);
-    preview.classList.toggle("mirror", state.mirror);
-    text.classList.toggle("center", state.center);
-    preview.classList.toggle("center", state.center);
+    for (const el of [text, preview]) { el.classList.toggle("mirror", state.mirror); el.classList.toggle("center", state.center); }
+    text.classList.toggle("voice", state.mode === "voice");
     $("mirror").setAttribute("aria-pressed", String(state.mirror));
     $("align").setAttribute("aria-pressed", String(state.center));
+    $("modeScroll").setAttribute("aria-pressed", String(state.mode === "scroll"));
+    $("modeVoice").setAttribute("aria-pressed", String(state.mode === "voice"));
+    $("speedBox").classList.toggle("off", state.mode === "voice");
+    $("langRow").hidden = state.mode !== "voice";
     $("speedVal").textContent = state.speed;
     $("sizeVal").textContent = state.size;
+    $("hint").textContent = state.mode === "voice"
+      ? "It moves as you read. If you stop, the next words light up. Repeat a line and it jumps back to it."
+      : "While prompting: tap to pause or resume, double-tap or the red button to come back here.";
   };
   const setSpeed = (d) => { state.speed = Math.min(30, Math.max(1, state.speed + d)); applySettings(); save(); };
-  const setSize = (d) => { state.size = Math.min(120, Math.max(18, state.size + d)); applySettings(); save(); };
+  const setSize = (d) => { state.size = Math.min(120, Math.max(18, state.size + d)); applySettings(); save(); if (!prompter.hidden && state.mode === "voice") computeTarget(true); };
 
+  if (!SR) { $("modeVoice").disabled = true; $("modeVoice").title = "Needs Chrome or Edge"; }
+  $("modeScroll").addEventListener("click", () => { state.mode = "scroll"; applySettings(); updateRestart(); save(); });
+  $("modeVoice").addEventListener("click", () => { state.mode = "voice"; applySettings(); updateRestart(); save(); });
+  $("lang").addEventListener("change", (e) => { state.lang = e.target.value; save(); });
   $("slower").addEventListener("click", () => setSpeed(-1));
   $("faster").addEventListener("click", () => setSpeed(1));
   $("smaller").addEventListener("click", () => setSize(-4));
@@ -263,20 +313,46 @@
   $("mirror").addEventListener("click", () => { state.mirror = !state.mirror; applySettings(); save(); });
   $("align").addEventListener("click", () => { state.center = !state.center; applySettings(); save(); });
 
-  // ---------- Scrolling engine ----------
-  let playing = false, pos = 0, last = 0, raf = 0, wakeLock = null, countTimer = 0, toastTimer = 0;
-  const endOfText = () => Math.max(0, Math.min(scroller.scrollHeight - scroller.clientHeight, text.scrollHeight - scroller.clientHeight * 1.3));
-  const updateProgress = () => { progress.style.width = Math.min(100, (scroller.scrollTop / Math.max(1, endOfText())) * 100) + "%"; };
+  // ---------- Shared helpers ----------
+  let toastTimer = 0, wakeLock = null;
   const showToast = (msg, ms = 2200) => {
     toast.textContent = msg; toast.classList.add("show");
     clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove("show"), ms);
   };
+  const endOfText = () => Math.max(0, Math.min(scroller.scrollHeight - scroller.clientHeight, text.scrollHeight - scroller.clientHeight * 1.3));
+  const updateProgress = () => {
+    const pct = state.mode === "voice" && words.length
+      ? (state.cursor / words.length) * 100
+      : (scroller.scrollTop / Math.max(1, endOfText())) * 100;
+    progress.style.width = Math.min(100, pct) + "%";
+  };
 
+  // Script rendered as word spans so voice mode can track position
+  const norm = (s) => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, "");
+  let words = [], spans = [];
+  const renderText = () => {
+    text.textContent = "";
+    words = []; spans = [];
+    const frag = document.createDocumentFragment();
+    for (const tok of state.script.split(/(\s+)/)) {
+      if (!tok) continue;
+      const n = /^\s+$/.test(tok) ? "" : norm(tok);
+      if (!n) { frag.appendChild(document.createTextNode(tok)); continue; }
+      const s = document.createElement("span");
+      s.className = "w"; s.textContent = tok;
+      frag.appendChild(s);
+      spans.push(s); words.push(n);
+    }
+    text.appendChild(frag);
+  };
+
+  // ---------- Auto-scroll mode ----------
+  let playing = false, pos = 0, last = 0, raf = 0, countTimer = 0;
   const tick = (t) => {
     if (!playing) return;
     const dt = last ? Math.min(0.1, (t - last) / 1000) : 0;
     last = t;
-    pos += state.speed * state.size * 0.075 * dt; // steady lines-per-second at any size
+    pos += state.speed * state.size * 0.075 * dt;
     if (pos >= endOfText()) { pos = endOfText(); scroller.scrollTop = pos; pause(); showToast("End of script. Double-tap for settings", 3500); return; }
     scroller.scrollTop = pos;
     updateProgress();
@@ -284,36 +360,172 @@
   };
   const play = () => {
     if (playing) return;
-    if (scroller.scrollTop >= endOfText() - 1) scroller.scrollTop = 0; // replay from top when at the end
+    if (scroller.scrollTop >= endOfText() - 1) scroller.scrollTop = 0;
     playing = true; last = 0; pos = scroller.scrollTop;
     toast.classList.remove("show");
     raf = requestAnimationFrame(tick);
   };
-  function pause() {
-    playing = false;
-    cancelAnimationFrame(raf);
-    state.pos = scroller.scrollTop; save();
-  }
+  function pause() { playing = false; cancelAnimationFrame(raf); state.pos = scroller.scrollTop; save(); }
   const cancelCountdown = () => { clearInterval(countTimer); countdown.hidden = true; };
   const startWithCountdown = () => {
     cancelCountdown();
     let n = 3;
     countdown.textContent = n; countdown.hidden = false;
-    countTimer = setInterval(() => {
-      n -= 1;
-      if (n <= 0) { cancelCountdown(); play(); }
-      else countdown.textContent = n;
-    }, 800);
+    countTimer = setInterval(() => { n -= 1; if (n <= 0) { cancelCountdown(); play(); } else countdown.textContent = n; }, 800);
+  };
+  scroller.addEventListener("scroll", () => { if (!playing && state.mode === "scroll") { pos = scroller.scrollTop; updateProgress(); } }, { passive: true });
+
+  // ---------- Voice-follow mode ----------
+  let rec = null, wantListen = false, lastHeard = 0, target = 0, vraf = 0, vlast = 0, cueOn = false, retryDelay = 250;
+
+  const similar = (a, b) => {
+    if (a === b) return true;
+    if (a.length >= 4 && b.length >= 4 && a.slice(0, 4) === b.slice(0, 4) && Math.abs(a.length - b.length) <= 3) return true;
+    if (a.length >= 5 && b.length >= 5 && Math.abs(a.length - b.length) <= 1) {
+      // one-edit distance
+      let i = 0, j = 0, edits = 0;
+      while (i < a.length && j < b.length) {
+        if (a[i] === b[j]) { i++; j++; continue; }
+        if (++edits > 1) return false;
+        if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+      }
+      return edits + (a.length - i) + (b.length - j) <= 1;
+    }
+    return false;
   };
 
-  scroller.addEventListener("scroll", () => { if (!playing) { pos = scroller.scrollTop; updateProgress(); } }, { passive: true });
+  // Find where in the script the last few spoken words line up best, near the current position.
+  const findPos = (sp) => {
+    const k = sp.length, cur = state.cursor, N = words.length;
+    let best = -1, bestAdj = -Infinity;
+    const lo = Math.max(0, cur - 60), hi = Math.min(N - 1, cur + 30);
+    for (let p = lo; p <= hi; p++) {
+      if (!similar(sp[k - 1], words[p])) continue;
+      let score = 0, miss = 0;
+      for (let j = 0; j < k && p - j >= 0; j++) {
+        if (similar(sp[k - 1 - j], words[p - j])) score++;
+        else if (++miss > 1) break;
+      }
+      const back = p < cur - 1;
+      const ok = back ? score >= 3 : score >= 2 || (p >= cur && p <= cur + 2 && sp[k - 1].length >= 3);
+      if (!ok) continue;
+      const adj = score - Math.abs(p - cur) * 0.03 - (back ? 0.75 : 0);
+      if (adj > bestAdj) { bestAdj = adj; best = p; }
+    }
+    return best;
+  };
 
-  // Tap = pause/resume, double-tap = back to setup
+  const clearCue = () => {
+    if (!cueOn) return;
+    for (const s of text.querySelectorAll(".w.cue")) s.classList.remove("cue");
+    cueOn = false;
+  };
+  const showCue = () => {
+    const end = Math.min(spans.length, state.cursor + 7);
+    for (let i = state.cursor; i < end; i++) spans[i].classList.add("cue");
+    cueOn = end > state.cursor;
+  };
+
+  function computeTarget(jump) {
+    if (!spans.length) return;
+    const el = spans[Math.min(state.cursor, spans.length - 1)];
+    target = Math.max(0, text.offsetTop + el.offsetTop + el.offsetHeight / 2 - guide.offsetTop);
+    if (jump) scroller.scrollTop = target;
+  }
+
+  const setCursor = (c, jump) => {
+    c = Math.max(0, Math.min(words.length, c));
+    const prev = state.cursor;
+    const a = Math.min(prev, c), b = Math.max(prev, c);
+    for (let i = Math.max(0, a - 1); i <= Math.min(spans.length - 1, b); i++) {
+      spans[i].classList.toggle("done", i < c);
+      spans[i].classList.remove("now");
+    }
+    if (spans[c]) spans[c].classList.add("now");
+    state.cursor = c;
+    computeTarget(jump);
+    updateProgress();
+  };
+  const markAll = () => { for (let i = 0; i < spans.length; i++) { spans[i].classList.toggle("done", i < state.cursor); spans[i].classList.remove("now"); } if (spans[state.cursor]) spans[state.cursor].classList.add("now"); };
+
+  const handleSpeech = (t) => {
+    const sp = t.split(/\s+/).map(norm).filter(Boolean).slice(-6);
+    if (!sp.length) return;
+    lastHeard = performance.now();
+    clearCue();
+    const p = findPos(sp);
+    if (p >= 0 && p + 1 !== state.cursor) setCursor(p + 1);
+    if (state.cursor >= words.length) showToast("End of script. Tap the red button for settings", 3500);
+  };
+
+  const vloop = (t) => {
+    if (prompter.hidden || state.mode !== "voice") return;
+    const dt = vlast ? Math.min(0.1, (t - vlast) / 1000) : 0;
+    vlast = t;
+    if (wantListen) {
+      const dy = target - scroller.scrollTop;
+      if (Math.abs(dy) > 0.5) scroller.scrollTop += dy * Math.min(1, dt * 5);
+      if (!cueOn && lastHeard && t - lastHeard > 3500 && state.cursor < words.length) showCue();
+    }
+    vraf = requestAnimationFrame(vloop);
+  };
+
+  const ensureRec = () => {
+    if (rec) { rec.lang = state.lang; return; }
+    rec = new SR();
+    rec.lang = state.lang;
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.onstart = () => { mic.classList.add("on"); retryDelay = 250; };
+    rec.onresult = (e) => {
+      let t = "";
+      for (let i = Math.max(0, e.results.length - 2); i < e.results.length; i++) t += " " + e.results[i][0].transcript;
+      handleSpeech(t);
+    };
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        wantListen = false;
+        showToast("Microphone access is blocked. Allow it for this site in the browser settings", 5000);
+      } else if (e.error === "audio-capture") {
+        retryDelay = 2000;
+        showToast("Can’t hear the microphone. Another app, like the camera, may be using it", 4000);
+      } else if (e.error === "network") {
+        retryDelay = 2000;
+        showToast("Voice needs an internet connection", 3000);
+      }
+    };
+    rec.onend = () => {
+      mic.classList.remove("on");
+      if (wantListen && !prompter.hidden) setTimeout(() => { if (wantListen) { try { rec.start(); } catch (e) {} } }, retryDelay);
+    };
+  };
+  const startVoice = () => {
+    if (!SR) return;
+    wantListen = true;
+    lastHeard = performance.now();
+    ensureRec();
+    try { rec.start(); } catch (e) {}
+  };
+  const stopVoice = () => {
+    wantListen = false;
+    clearCue();
+    mic.classList.remove("on");
+    try { rec && rec.stop(); } catch (e) {}
+    save();
+  };
+
+  // ---------- Taps: tap = pause/resume, double-tap = settings ----------
   let tapTimer = 0;
   scroller.addEventListener("click", () => {
     if (tapTimer) { clearTimeout(tapTimer); tapTimer = 0; closePrompter(); return; }
     tapTimer = setTimeout(() => {
       tapTimer = 0;
+      if (state.mode === "voice") {
+        if (wantListen) { stopVoice(); showToast("Stopped listening. Tap to listen again"); }
+        else { startVoice(); showToast("Listening", 1200); }
+        return;
+      }
       if (!countdown.hidden) { cancelCountdown(); showToast("Paused. Tap to resume, double-tap for settings"); return; }
       if (playing) { pause(); showToast("Paused. Tap to resume, double-tap for settings"); }
       else play();
@@ -334,17 +546,27 @@
   const openPrompter = (fromTop) => {
     if (!script.value.trim()) { script.focus(); script.placeholder = "Add some text first, then press Start."; return; }
     state.script = script.value;
-    if (fromTop) state.pos = 0;
+    if (fromTop) { state.pos = 0; state.cursor = 0; }
     save();
-    text.textContent = state.script;
+    renderText();
     applySettings();
     editor.hidden = true; prompter.hidden = false;
-    scroller.scrollTop = pos = state.pos; updateProgress();
     lockScreen();
-    startWithCountdown();
+    if (state.mode === "voice") {
+      mic.hidden = false;
+      markAll();
+      requestAnimationFrame(() => { computeTarget(true); updateProgress(); });
+      startVoice();
+      showToast("Listening. Start reading when you’re ready", 2500);
+      vlast = 0; cancelAnimationFrame(vraf); vraf = requestAnimationFrame(vloop);
+    } else {
+      mic.hidden = true;
+      scroller.scrollTop = pos = state.pos; updateProgress();
+      startWithCountdown();
+    }
   };
   function closePrompter() {
-    cancelCountdown(); pause(); unlockScreen();
+    cancelCountdown(); pause(); stopVoice(); cancelAnimationFrame(vraf); unlockScreen();
     toast.classList.remove("show");
     prompter.hidden = true; editor.hidden = false;
     updateRestart();
@@ -356,19 +578,38 @@
   // ---------- Keyboard / Bluetooth remote ----------
   document.addEventListener("keydown", (e) => {
     if (prompter.hidden) return;
+    const voice = state.mode === "voice";
     switch (e.key) {
       case " ": case "Enter": case "PageDown": case "MediaPlayPause":
-        e.preventDefault(); cancelCountdown(); playing ? pause() : play(); break;
-      case "ArrowUp": case "ArrowRight": e.preventDefault(); setSpeed(1); showToast("Speed " + state.speed, 1000); break;
-      case "ArrowDown": case "ArrowLeft": e.preventDefault(); setSpeed(-1); showToast("Speed " + state.speed, 1000); break;
-      case "PageUp": e.preventDefault(); pause(); scroller.scrollTop = pos = Math.max(0, pos - scroller.clientHeight * 0.4); break;
+        e.preventDefault();
+        if (voice) { wantListen ? stopVoice() : startVoice(); }
+        else { cancelCountdown(); playing ? pause() : play(); }
+        break;
+      case "ArrowUp": case "ArrowLeft":
+        e.preventDefault();
+        if (voice) setCursor(state.cursor - 5); else { setSpeed(e.key === "ArrowUp" ? 1 : -1); showToast("Speed " + state.speed, 1000); }
+        break;
+      case "ArrowDown": case "ArrowRight":
+        e.preventDefault();
+        if (voice) setCursor(state.cursor + 5); else { setSpeed(e.key === "ArrowRight" ? 1 : -1); showToast("Speed " + state.speed, 1000); }
+        break;
+      case "PageUp":
+        e.preventDefault();
+        if (voice) setCursor(state.cursor - 12);
+        else { pause(); scroller.scrollTop = pos = Math.max(0, pos - scroller.clientHeight * 0.4); }
+        break;
       case "+": case "=": setSize(4); break;
       case "-": setSize(-4); break;
-      case "Home": pause(); scroller.scrollTop = pos = 0; updateProgress(); break;
+      case "Home": if (voice) setCursor(0, true); else { pause(); scroller.scrollTop = pos = 0; updateProgress(); } break;
       case "Escape": closePrompter(); break;
     }
   });
-  window.addEventListener("resize", () => { if (!playing) pos = scroller.scrollTop; updateProgress(); });
+  window.addEventListener("resize", () => {
+    if (prompter.hidden) return;
+    if (state.mode === "voice") computeTarget(true);
+    else if (!playing) pos = scroller.scrollTop;
+    updateProgress();
+  });
 
   updateStats(); updateRestart(); applySettings();
 })();
